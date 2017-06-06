@@ -60,6 +60,23 @@ getListOfSongsInTop40 = function() {
   return(songData)
 }
 
+filterArtistRemoveCollabs = function(song, artist) {
+  # Checks to see if an artist title might be a collaboration
+  wordsThatIndicateCollab = "&|and|feat|with|/|by"
+  if (grepl(wordsThatIndicateCollab, artist)) {
+    queryUrl = paste("http://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=", lastfm_key, "&artist=", artist, "&track=", song, "&format=json", sep = "")
+    trackData = fromJSON(URLencode(queryUrl, repeated = FALSE, reserved = FALSE))
+    primaryArtist = trackData$track$artist$name
+    
+    print(paste(artist, " to ", primaryArtist))
+    return(primaryArtist)
+  }
+  else {
+    print(paste("Keeping ", artist))
+    return(artist)
+  }
+}
+
 getNumberOfAppearances = function(song_data) {
   appearancesTable = table(song_data$artist)
   appearances = as.data.frame(appearancesTable)
@@ -73,9 +90,18 @@ removeFeaturing = function(artists) {
 
 getWonderScoreOfTopSongs = function(artist) {
   getTopSongs = function(artist) {
-    topSongsUrl = paste("http://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=", artist, "&api_key=", lastfm_key,"&format=json&limit=30", sep = "")
+    topSongsUrl = paste("http://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=", artist, "&api_key=", lastfm_key,"&format=json&limit=40", sep = "")
     topSongsUrl = URLencode(topSongsUrl, repeated = FALSE, reserved = FALSE)
     topSongsFullData = fromJSON(topSongsUrl)
+    
+    # This clears up any formatting issues, like all lowercase or missing aposthropehe
+    actualArtist = as.character(topSongsFullData$toptracks$track$artist$name[1])
+    if (length(actualArtist) > 0) {
+      assign("actualArtist", actualArtist, envir = parent.frame())
+    }
+    else {
+      assign("actualArtist", artist, envir = parent.frame())
+    }
     
     tracks = as.vector(topSongsFullData$toptracks$track$name)
     tracks = as.character(tracks)
@@ -124,61 +150,38 @@ getWonderScoreOfTopSongs = function(artist) {
   topSongs = removeRemixesFromTopSongs(topSongs)
   topSongs = head(topSongs, 10)
   
-  topSong = as.character(topSongs$song[1])
-  #topSongId = as.character(topSongs$id[1])
-  
+  topSong = topSongs[which.max(topSongs$plays), 1]
+  topSong = as.character(topSong)
+
   playCounts = as.numeric(paste(topSongs$plays))
-  iqrScore = calculateIqrScore(playCounts)
   sdRatioScore = calculateSdRatio(playCounts)
   
   #Sys.sleep(0.3)
-  return(list("iqrScore" = iqrScore, "sdRatioScore" =  sdRatioScore, "song" = topSong))
-}
-
-getYearsFromId = function(songId) {
-  songDataUrl = paste("http://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=", lastfm_key, "&mbid=", songId, "&format=json", sep = '')
-  songData = fromJSON(songDataUrl)
-  
-  albumId = as.character(songData$track$album$mbid)
-  albumUrl = paste("http://ws.audioscrobbler.com/2.0/?method=album.getInfo&api_key=", lastfm_key, "&mbid=", albumId, "&format=json", sep = '')
-  albumData = fromJSON(albumUrl)
+  return(list("actualArtist" = actualArtist, "sdRatioScore" =  sdRatioScore, "song" = topSong))
 }
 
 # Get every song that has ever appeared in the Top 40, and then get the number of times each artist has appeared (once per song)
-songData = getListOfSongsInTop40()    # or load("AllSongsInTop40")
+songData = getListOfSongsInTop40()    # or load("AllSongsInTop4.RData")
+save(songData, file = "AllSongsInTop40.RData")
 appearances = getNumberOfAppearances(songData)
 
 # Get a list of every artist that has had three or fewer appearances on the Top 40
-threeOrLessHits = filter(appearances, Freq < 4)
+threeOrLessHits = dplyr::filter(appearances, Freq < 4)
+
+# Try and remove collaborations
+threeOrLessHits = dplyr::filter(threeOrLessHits, !(grepl(" and ", Var1)&!grepl("and the", Var1)&!grepl("and his", Var1)))
+threeOrLessHits = dplyr::filter(threeOrLessHits, !(grepl("&", Var1)))
+threeOrLessHits = dplyr::filter(threeOrLessHits, !(grepl("with |ft. |ft |featuring|/|feat. |featruing", Var1)))
+
 possibleWonders = as.vector(threeOrLessHits$Var1)
 
-# Remove "x featuring y"
-possibleWonders = removeFeaturing(possibleWonders)
-
-scoresAndSongs = lapply(possibleWonders, FUN = getWonderScoreOfTopSongs)
-iqrScores = lapply(scoresAndSongs, FUN = function(x) {return(x[["iqrScore"]])})
+scoresAndSongs = lapply(possibleWonders, FUN = getWonderScoreOfTopSongs) # Or skip a few lines and load("ScriptResults.RData")
 sdRatioScores = lapply(scoresAndSongs, FUN = function(x) {return(x[["sdRatioScore"]])})
 songs = lapply(scoresAndSongs, FUN = function(x) {return(x[["song"]])})
+actualArtists = lapply(scoresAndSongs, FUN = function(x) {return(x[["actualArtist"]])})
 
-finalData = data.frame(artists = possibleWonders, iqrScore = unlist(iqrScores), sdRatioScore = unlist(sdRatioScores), hit = unlist(songs))
+songsAndScoresDf = data.frame(artists = unlist(actualArtists), sdRatioScore = unlist(sdRatioScores), hit = unlist(songs))
+save(songsAndScoresDf, file = "ScriptResults.RData")
 
-finalData = filter(finalData, sdRatioScore != 0)
-finalData = filter(finalData, sdRatioScore != Inf)
-finalData = filter(finalData, iqrScore != Inf)
-finalData = filter(finalData, iqrScore != 0)
+exportData = dplyr::filter(songsAndScoresDf)
 
-exportData = filter(finalData, sdRatioScore > 25)
-exportData$iqrScore = NULL
-
-missedCollabs = c("kungs vs cookin on 3 burners", "peter cetera with amy grant", "johnny cash and the tennessee three", "j. frank wilson and the cavaliers", 
-                  "joe cocker and jennifer warnes", "machine gun kelly x camila cabello", "b.m.u. (black men united)", "usa for africa", "kygo x selena gomez",
-                  "philip bailey with phil collins", "ludacris co-starring t-pain", "shaggy feat. ricardo \"rikrok\" ducent", "bobby vee and the strangers",
-                  "luther vandross and janet jackson", "amy grant with vince gill", "rod stewart with ronald isley", "stevie nicks with tom petty and the heartbreakers",
-                  "g-eazy x bebe rexha", "new boyz feat. ray j", "zach sobiech", "julia michaels", "band-aid", "the little dippers")
-
-exportData = filter(exportData, !(artists %in% missedCollabs))
-exportData = arrange(exportData, desc(sdRatioScore))
-
-exportData = head(exportData, 30)
-
-write.csv(exportData, "OneHitWonders.csv")
