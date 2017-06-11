@@ -2,7 +2,8 @@ library(rvest)
 library(dplyr)
 library(jsonlite)
 
-lastfm_key = 'ad1902e583803953df32c4655a5aace7'
+# RData file that has a Last fm key stored as a string variable called lastfm_key
+load("LastFmKey.RData")
 
 getListOfSongsInTop40 = function() {
   currentUrl = "http://www.billboard.com/charts/hot-100/1958-08-16"
