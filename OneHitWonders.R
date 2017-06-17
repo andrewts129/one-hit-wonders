@@ -5,6 +5,11 @@ library(jsonlite)
 # RData file that has a Last fm key stored as a string variable called lastfm_key
 load("LastFmKey.RData")
 
+# RData file that has Discogs API as discogs_key and discogs_secret
+load("DiscogsKeys.RData")
+
+options("HTTPUserAgent" = "OneHitWonders/0.2 +https://github.com/andrewts129/one-hit-wonders")
+
 getListOfSongsInTop40 = function() {
   currentUrl = "http://www.billboard.com/charts/hot-100/1958-08-16"
   
@@ -59,23 +64,6 @@ getListOfSongsInTop40 = function() {
   }
   
   return(songData)
-}
-
-filterArtistRemoveCollabs = function(song, artist) {
-  # Checks to see if an artist title might be a collaboration
-  wordsThatIndicateCollab = "&|and|feat|with|/|by"
-  if (grepl(wordsThatIndicateCollab, artist)) {
-    queryUrl = paste("http://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=", lastfm_key, "&artist=", artist, "&track=", song, "&format=json", sep = "")
-    trackData = fromJSON(URLencode(queryUrl, repeated = FALSE, reserved = FALSE))
-    primaryArtist = trackData$track$artist$name
-    
-    print(paste(artist, " to ", primaryArtist))
-    return(primaryArtist)
-  }
-  else {
-    print(paste("Keeping ", artist))
-    return(artist)
-  }
 }
 
 getNumberOfAppearances = function(song_data) {
@@ -161,8 +149,24 @@ getWonderScoreOfTopSongs = function(artist) {
   return(list("actualArtist" = actualArtist, "sdRatioScore" =  sdRatioScore, "song" = topSong))
 }
 
+getYearOfSong = function(trackTitle, artist) {
+  print(paste("Getting the year for", trackTitle, "-", artist))
+  query = paste("https://api.discogs.com/database/search?q=", artist, "+", trackTitle, "&key=",discogs_key,"&secret=", discogs_secret, sep = "")
+  tryCatch({assign("fromDiscogs", fromDiscogs, fromJSON(URLencode(query, repeated = FALSE, reserved = FALSE)), envir = parent.frame())}, 
+           error = function(err) {
+             print("SLOW DOWN")
+             Sys.sleep(64)
+             return(getYearOfSong(trackTitle, artist))
+           })
+  
+  years = fromDiscogs$results$year
+  lowestYear = min(as.numeric(years), na.rm = TRUE)
+  
+  return(lowestYear)
+}
+
 # Get every song that has ever appeared in the Top 40, and then get the number of times each artist has appeared (once per song)
-songData = getListOfSongsInTop40()    # or load("AllSongsInTop4.RData")
+songData = getListOfSongsInTop40()    # or load("AllSongsInTop40.RData")
 save(songData, file = "AllSongsInTop40.RData")
 appearances = getNumberOfAppearances(songData)
 
@@ -178,11 +182,29 @@ possibleWonders = as.vector(threeOrLessHits$Var1)
 
 scoresAndSongs = lapply(possibleWonders, FUN = getWonderScoreOfTopSongs) # Or skip a few lines and load("ScriptResults.RData")
 sdRatioScores = lapply(scoresAndSongs, FUN = function(x) {return(x[["sdRatioScore"]])})
+
+# There are some null values, need to convert those to something real
 songs = lapply(scoresAndSongs, FUN = function(x) {return(x[["song"]])})
+songs = lapply(songs, FUN = function(x) {
+  if (is.null(x) || length(x) == 0) {
+    return("NOT_FOUND")
+  }
+  else {
+    return(x)
+  }
+})
+
 actualArtists = lapply(scoresAndSongs, FUN = function(x) {return(x[["actualArtist"]])})
 
 songsAndScoresDf = data.frame(artists = unlist(actualArtists), sdRatioScore = unlist(sdRatioScores), hit = unlist(songs))
+
+# Cleaning
+songsAndScoresDf = dplyr::filter(songsAndScoresDf, !grepl("NOT_FOUND", hit))
+songsAndScoresDf = dplyr::filter(songsAndScoresDf, sdRatioScore != Inf)
+songsAndScoresDf = dplyr::filter(songsAndScoresDf, sdRatioScore != 0)
+
+# Getting the release year of each song, as last.fm doesn't provide that...
+releaseYears = mapply(FUN = getYearOfSong, trackTitle = songsAndScoresDf$hit, artist = songsAndScoresDf$artists)
+songsAndScoresDf$year = releaseYears
+
 save(songsAndScoresDf, file = "ScriptResults.RData")
-
-exportData = dplyr::filter(songsAndScoresDf)
-
