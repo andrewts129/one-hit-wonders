@@ -134,6 +134,12 @@ getWonderScoreOfTopSongs = function(artist) {
     }
   }
   
+  getOtherSongs = function(hit, top_songs) {
+    songNames = as.character(top_songs$song)
+    songNames = songNames[songNames != hit]
+    return(songNames)
+  }
+  
   print(paste("Getting score for",artist))
   topSongs = getTopSongs(artist)
   topSongs = removeRemixesFromTopSongs(topSongs)
@@ -141,12 +147,14 @@ getWonderScoreOfTopSongs = function(artist) {
   
   topSong = topSongs[which.max(topSongs$plays), 1]
   topSong = as.character(topSong)
+  
+  otherSongs = getOtherSongs(topSong, topSongs)
 
   playCounts = as.numeric(paste(topSongs$plays))
   sdRatioScore = calculateSdRatio(playCounts)
   
   #Sys.sleep(0.3)
-  return(list("actualArtist" = actualArtist, "sdRatioScore" =  sdRatioScore, "song" = topSong))
+  return(list("actualArtist" = actualArtist, "sdRatioScore" =  sdRatioScore, "song" = topSong, "otherSongs" = otherSongs))
 }
 
 getYearOfSong = function(trackTitle, artist) {
@@ -181,27 +189,27 @@ threeOrLessHits = dplyr::filter(threeOrLessHits, !(grepl("with |ft. |ft |featuri
 possibleWonders = as.vector(threeOrLessHits$Var1)
 
 scoresAndSongs = lapply(possibleWonders, FUN = getWonderScoreOfTopSongs) # Or skip a few lines and load("ScriptResults.RData")
-sdRatioScores = lapply(scoresAndSongs, FUN = function(x) {return(x[["sdRatioScore"]])})
-
-# There are some null values, need to convert those to something real
-songs = lapply(scoresAndSongs, FUN = function(x) {return(x[["song"]])})
-songs = lapply(songs, FUN = function(x) {
+sdRatioScores = vapply(scoresAndSongs, FUN = function(x) {return(x[["sdRatioScore"]])}, FUN.VALUE = numeric(1))
+songs = sapply(scoresAndSongs, FUN = function(x) {return(x[["song"]])})
+songs = vapply(songs, FUN = function(x) {
   if (is.null(x) || length(x) == 0) {
     return("NOT_FOUND")
   }
   else {
     return(x)
   }
-})
+}, FUN.VALUE = character(1))
+actualArtists = vapply(scoresAndSongs, FUN = function(x) {return(x[["actualArtist"]])}, FUN.VALUE = character(1))
+otherSongs = sapply(scoresAndSongs, FUN = function(x) {return(x[["otherSongs"]])})
 
-actualArtists = lapply(scoresAndSongs, FUN = function(x) {return(x[["actualArtist"]])})
-
-songsAndScoresDf = data.frame(artists = unlist(actualArtists), sdRatioScore = unlist(sdRatioScores), hit = unlist(songs))
+songsAndScoresDf = data.frame(artists = actualArtists, sdRatioScore = sdRatioScores, hit = songs, other = I(otherSongs))
 
 # Cleaning
 songsAndScoresDf = dplyr::filter(songsAndScoresDf, !grepl("NOT_FOUND", hit))
 songsAndScoresDf = dplyr::filter(songsAndScoresDf, sdRatioScore != Inf)
 songsAndScoresDf = dplyr::filter(songsAndScoresDf, sdRatioScore != 0)
+
+songsAndScoresDf = arrange(songsAndScoresDf, desc(sdRatioScore))
 
 # Getting the release year of each song, as last.fm doesn't provide that...
 releaseYears = mapply(FUN = getYearOfSong, trackTitle = songsAndScoresDf$hit, artist = songsAndScoresDf$artists)
