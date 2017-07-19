@@ -168,7 +168,7 @@ getYearOfSong = function(trackTitle, artist) {
            })
   
   Sys.sleep(3)
-  years = fromDiscogs$results$year
+  years = tryCatch({fromDiscogs$results$year}, error = function(err){return(0)})
   lowestYear = min(as.numeric(years), na.rm = TRUE)
   
   return(lowestYear)
