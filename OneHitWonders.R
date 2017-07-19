@@ -160,13 +160,14 @@ getWonderScoreOfTopSongs = function(artist) {
 getYearOfSong = function(trackTitle, artist) {
   print(paste("Getting the year for", trackTitle, "-", artist))
   query = paste("https://api.discogs.com/database/search?q=", artist, "+", trackTitle, "&key=",discogs_key,"&secret=", discogs_secret, sep = "")
-  tryCatch({assign("fromDiscogs", fromDiscogs, fromJSON(URLencode(query, repeated = FALSE, reserved = FALSE)), envir = parent.frame())}, 
+  fromDiscogs = tryCatch({fromJSON(URLencode(query, repeated = FALSE, reserved = FALSE))}, 
            error = function(err) {
              print("SLOW DOWN")
              Sys.sleep(64)
-             return(getYearOfSong(trackTitle, artist))
+             return(0)
            })
   
+  Sys.sleep(3)
   years = fromDiscogs$results$year
   lowestYear = min(as.numeric(years), na.rm = TRUE)
   
