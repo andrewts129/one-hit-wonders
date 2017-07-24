@@ -216,4 +216,7 @@ songsAndScoresDf = arrange(songsAndScoresDf, desc(sdRatioScore))
 releaseYears = mapply(FUN = getYearOfSong, trackTitle = songsAndScoresDf$hit, artist = songsAndScoresDf$artists)
 songsAndScoresDf$year = releaseYears
 
+songsAndScoresDf = dplyr::filter(songsAndScoresDf, year < 2014)
+songsAndScoresDf = dplyr::filter(songsAndScoresDf, sdRatioScore > 20)
+
 save(songsAndScoresDf, file = "ScriptResults.RData")
