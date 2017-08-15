@@ -42,7 +42,7 @@ function getDecade(year) {
 }
 
 // Loads in the data from R as an array of objects
-$.getJSON("OneHitWonders.json", function (response) {
+$.getJSON("data/OneHitWonders.json", function (response) {
     var dataset = response;
 
     var fontSize = 16;
@@ -58,7 +58,7 @@ $.getJSON("OneHitWonders.json", function (response) {
     var canvasHeight = (barHeight + barPadding) * dataset.length;
 
     // The canvas
-    var svg = d3.select("body")
+    var svg = d3.select("#one-hit-wonder-viz")
         .append("svg")
         .attr("width", canvasWidth)
         .attr("height", canvasHeight);
@@ -136,5 +136,38 @@ $.getJSON("OneHitWonders.json", function (response) {
         .attr("fill", function (d) {
             return getColorForDecade(getDecade(d.year));
         });
+
+    // The scores
+    svg.selectAll("text.score").data(dataset).enter()
+        .append("text")
+        .text(function (d) {
+            return d.sdRatioScore.toFixed(2)
+        })
+        .attr("class", "score")
+        .attr("x", function (d, i) {
+            // For whatever reason the first data point is too far to the right
+            if (i === 0) {
+                return maxTextLength - 7 + d.sdRatioScore * lengthMultiplier;
+            }
+            else {
+                return maxTextLength - 2 + d.sdRatioScore * lengthMultiplier;
+            }
+        })
+        .attr("y", function (d, i) {
+            return i * (barHeight + barPadding) + fontSize + (barHeight / 2);
+        })
+        .attr("fill", function (d) {
+            // White doesn't show well on yellow
+            if (getColorForDecade(getDecade(d.year)) === "#ffff33") {
+                return "#222222"
+            }
+            else {
+                return "#ffffff"
+            }
+        })
+        .attr("text-anchor", "end")
+        .style("font-family", "Montserrat, sans-serif")
+        .style("font-size", (fontSize * 1.3) + "px")
+        .style("font-weight", "400");
 });
 
