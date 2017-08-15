@@ -1,24 +1,43 @@
-function getColorForDecade(year) {
+function getColorForDecade(decade) {
+    switch (decade) {
+        case "50s":
+            return "#e41a1c";
+        case "60s":
+            return "#377eb8";
+        case "70s":
+            return "#4daf4a";
+        case "80s":
+            return "#984ea3";
+        case "90s":
+            return "#ff7f00";
+        case "00s":
+            return "#ffff33";
+        default:
+            return "#000000";
+    }
+}
+
+function getDecade(year) {
     if (year < 1960) {
-        return "#FF0000";
+        return "50s";
     }
     else if (year < 1970) {
-        return "#FFFF00";
+        return "60s";
     }
     else if (year < 1980) {
-        return "#00FF00";
+        return "70s";
     }
     else if (year < 1990) {
-        return "#00FFFF";
+        return "80s";
     }
     else if (year < 2000) {
-        return "#0000FF";
+        return "90s";
     }
     else if (year < 2010) {
-        return "#FF00FF";
+        return "00s";
     }
     else {
-        return "#800080";
+        return "'10s";
     }
 }
 
@@ -58,9 +77,11 @@ $.getJSON("OneHitWonders.json", function (response) {
         .attr("y", function (d, i) {
             return i * (barHeight + barPadding) + (barHeight / 20) + fontSize;
         })
-        .attr("fill", "black")
+        .attr("fill", "#222222")
         .attr("text-anchor", "end")
+        .style("font-family", "Montserrat, sans-serif")
         .style("font-size", fontSize + "px")
+        .style("font-weight", "400")
         .each(function () {
             var textWidth = this.getComputedTextLength();
             if (textWidth > maxTextLength) {
@@ -79,9 +100,11 @@ $.getJSON("OneHitWonders.json", function (response) {
         .attr("y", function (d, i) {
             return i * (barHeight + barPadding) + (barHeight / 25 ) + fontSize + (barHeight / 10) + fontSize;
         })
-        .attr("fill", "black")
+        .attr("fill", "#444444")
         .attr("text-anchor", "end")
+        .style("font-family", "Montserrat, sans-serif")
         .style("font-size", fontSize + "px")
+        .style("font-weight", "300")
         .each(function () {
             var textWidth = this.getComputedTextLength();
             if (textWidth > maxTextLength) {
@@ -107,9 +130,11 @@ $.getJSON("OneHitWonders.json", function (response) {
             return d.sdRatioScore * lengthMultiplier;
         })
         .attr("height", barHeight)
+        .attr("data-legend", function (d) {
+            return getDecade(d.year);
+        })
         .attr("fill", function (d) {
-            return getColorForDecade(d.year);
+            return getColorForDecade(getDecade(d.year));
         });
-
 });
 
